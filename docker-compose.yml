@@ -1,0 +1,25 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - OPENWHISPER_HOST=0.0.0.0
+      - OPENWHISPER_PORT=8000
+      - OPENWHISPER_CORS_ORIGINS=["http://localhost:3000"]
+    restart: unless-stopped
+
+  web:
+    build: ./web
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      # Server-side override so the Next.js API route can reach the backend container
+      - WHISPER_SERVER_INTERNAL_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
