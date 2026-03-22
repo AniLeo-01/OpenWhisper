@@ -7,8 +7,12 @@ import { NextRequest, NextResponse } from "next/server";
  * Removes filler words, fixes grammar, handles corrections,
  * adjusts tone based on context.
  *
+ * Session-aware: accepts `previousContext` so the LLM understands
+ * this is a continuation of an ongoing dictation, not a fresh start.
+ *
  * Body: {
- *   text: string,
+ *   text: string,                  // The NEW segment to clean
+ *   previousContext?: string,      // Already-cleaned text from earlier in this session
  *   provider: "groq" | "openai" | "ollama" | "none",
  *   tone: "auto" | "casual" | "professional" | "technical",
  *   groqApiKey?: string,
@@ -17,13 +21,14 @@ import { NextRequest, NextResponse } from "next/server";
  *   dictionary?: string[],
  * }
  *
- * Returns: { text: string }
+ * Returns: { text: string }  // Only the cleaned NEW segment (not the full session)
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {
       text,
+      previousContext = "",
       provider = "none",
       tone = "auto",
       groqApiKey,
@@ -41,7 +46,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ text });
     }
 
-    const prompt = buildPrompt(text, tone, dictionary);
+    const prompt = buildPrompt(text, tone, dictionary, previousContext);
 
     let cleanedText: string;
 
@@ -69,7 +74,12 @@ export async function POST(request: NextRequest) {
 
 // ─── Prompt Builder ──────────────────────────────────────────────────
 
-function buildPrompt(text: string, tone: string, dictionary: string[]): string {
+function buildPrompt(
+  text: string,
+  tone: string,
+  dictionary: string[],
+  previousContext: string
+): string {
   const toneInstructions: Record<string, string> = {
     auto: "Match the natural tone of the text.",
     casual:
@@ -82,23 +92,36 @@ function buildPrompt(text: string, tone: string, dictionary: string[]): string {
 
   const dictionaryNote =
     dictionary.length > 0
-      ? `\nIMPORTANT: These are custom terms that must be preserved exactly: ${dictionary.join(", ")}`
+      ? `\nThe user has a personal dictionary. If any of these words appear in the dictation, preserve their exact spelling: ${dictionary.join(", ")}. If these words do NOT appear in the dictation, ignore them completely — do NOT mention them or add them.`
       : "";
 
-  return `You are a text cleanup assistant for a voice dictation tool. Clean up the following dictated text.
+  // If there's previous context, tell the LLM this is a continuation
+  const contextBlock = previousContext.trim()
+    ? `
+Previously dictated text (for context only — do NOT include this in your output):
+"""
+${previousContext.trim()}
+"""
+Use this context only to understand tone, resolve pronouns, and ensure continuity.`
+    : "";
+
+  return `You are a text cleanup tool. Your ONLY job is to output the cleaned version of the dictated text below. You must NEVER output explanations, reasoning, commentary, notes, or meta-text. You must NEVER discuss what you changed or why. Your entire response must be ONLY the cleaned text and nothing else.
 
 Rules:
-- Remove filler words (um, uh, like, you know, so, basically, I mean, right, actually)
-- Fix grammar, punctuation, and capitalization
-- Handle self-corrections: if the speaker says "no wait", "I mean", "actually", "let me rephrase", keep only their final intent
-- Do NOT add information or change the meaning
-- Do NOT add greetings, sign-offs, or any text not present in the dictation
-- ${toneInstructions[tone] || toneInstructions.auto}${dictionaryNote}
+1. Remove filler words: um, uh, like, you know, so, basically, I mean, right, actually
+2. Fix grammar, punctuation, and capitalization
+3. Handle self-corrections: "no wait", "I mean", "actually" → keep only the final intent
+4. Do NOT add any words, sentences, or information that the speaker did not say
+5. Do NOT remove meaningful content — only remove filler and fix grammar
+6. If the transcription contains garbled/nonsense fragments at the very end (artifacts from speech recognition), silently remove them
+7. ${toneInstructions[tone] || toneInstructions.auto}${dictionaryNote}
+${contextBlock}
+Dictated text to clean:
+"""
+${text}
+"""
 
-Return ONLY the cleaned text. No explanations, no quotes, no prefixes.
-
-Dictated text:
-${text}`;
+Cleaned text:`;
 }
 
 // ─── Providers ───────────────────────────────────────────────────────

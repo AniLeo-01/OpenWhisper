@@ -16,6 +16,24 @@ export interface UseAudioRecorderReturn {
   cancelRecording: () => void;
 }
 
+/** Minimum recording duration in ms to consider it valid speech */
+const MIN_DURATION_MS = 400;
+
+/**
+ * Minimum peak audio level (0–1) during recording to consider it speech.
+ * Below this, it's silence/noise and we discard to prevent Whisper hallucination.
+ */
+const MIN_PEAK_LEVEL = 0.04;
+
+/**
+ * Minimum percentage of frames that exceeded the speech threshold.
+ * Prevents sending clips that had one brief pop but were otherwise silent.
+ */
+const MIN_SPEECH_RATIO = 0.05;
+
+/** Audio level threshold to count a frame as "speech" */
+const SPEECH_THRESHOLD = 0.03;
+
 export function useAudioRecorder(): UseAudioRecorderReturn {
   const [state, setState] = useState<AudioRecorderState>({
     isRecording: false,
@@ -28,9 +46,15 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
   const animFrameRef = useRef<number | null>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const startTimeRef = useRef<number>(0);
+
+  // Track audio energy to detect silence
+  const peakLevelRef = useRef<number>(0);
+  const speechFramesRef = useRef<number>(0);
+  const totalFramesRef = useRef<number>(0);
 
   const updateAudioLevel = useCallback(() => {
     if (!analyserRef.current) return;
@@ -38,6 +62,16 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
     analyserRef.current.getByteFrequencyData(data);
     const avg = data.reduce((sum, val) => sum + val, 0) / data.length;
     const normalized = Math.min(avg / 128, 1);
+
+    // Track peak and speech frames
+    totalFramesRef.current++;
+    if (normalized > peakLevelRef.current) {
+      peakLevelRef.current = normalized;
+    }
+    if (normalized > SPEECH_THRESHOLD) {
+      speechFramesRef.current++;
+    }
+
     setState((prev) => ({ ...prev, audioLevel: normalized }));
     animFrameRef.current = requestAnimationFrame(updateAudioLevel);
   }, []);
@@ -54,8 +88,14 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
     streamRef.current = stream;
     chunksRef.current = [];
 
+    // Reset energy tracking
+    peakLevelRef.current = 0;
+    speechFramesRef.current = 0;
+    totalFramesRef.current = 0;
+
     // Set up audio analyser for level metering
     const audioCtx = new AudioContext();
+    audioCtxRef.current = audioCtx;
     const source = audioCtx.createMediaStreamSource(stream);
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 256;
@@ -94,46 +134,13 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
     updateAudioLevel();
   }, [updateAudioLevel]);
 
-  const stopRecording = useCallback((): Promise<Blob> => {
-    return new Promise((resolve) => {
-      const mediaRecorder = mediaRecorderRef.current;
-      if (!mediaRecorder || mediaRecorder.state === "inactive") {
-        resolve(new Blob());
-        return;
-      }
-
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, {
-          type: mediaRecorder.mimeType,
-        });
-        resolve(blob);
-      };
-
-      mediaRecorder.stop();
-
-      // Cleanup
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-      if (timerRef.current) clearInterval(timerRef.current);
-
-      setState({
-        isRecording: false,
-        isPaused: false,
-        duration: 0,
-        audioLevel: 0,
-      });
-    });
-  }, []);
-
-  const cancelRecording = useCallback(() => {
-    const mediaRecorder = mediaRecorderRef.current;
-    if (mediaRecorder && mediaRecorder.state !== "inactive") {
-      mediaRecorder.stop();
-    }
+  const cleanup = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     if (timerRef.current) clearInterval(timerRef.current);
-    chunksRef.current = [];
+    if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+      audioCtxRef.current.close().catch(() => {});
+    }
     setState({
       isRecording: false,
       isPaused: false,
@@ -141,6 +148,70 @@ export function useAudioRecorder(): UseAudioRecorderReturn {
       audioLevel: 0,
     });
   }, []);
+
+  const stopRecording = useCallback((): Promise<Blob> => {
+    return new Promise((resolve) => {
+      const mediaRecorder = mediaRecorderRef.current;
+      if (!mediaRecorder || mediaRecorder.state === "inactive") {
+        cleanup();
+        resolve(new Blob());
+        return;
+      }
+
+      const recordingDuration = Date.now() - startTimeRef.current;
+      const peakLevel = peakLevelRef.current;
+      const speechRatio =
+        totalFramesRef.current > 0
+          ? speechFramesRef.current / totalFramesRef.current
+          : 0;
+
+      mediaRecorder.onstop = () => {
+        cleanup();
+
+        // ─── Silence gate: discard if no real speech detected ────
+        // This prevents Whisper from hallucinating on silent/short clips
+        if (recordingDuration < MIN_DURATION_MS) {
+          console.log(
+            `[OpenWhisper] Discarded: too short (${recordingDuration}ms < ${MIN_DURATION_MS}ms)`
+          );
+          resolve(new Blob());
+          return;
+        }
+
+        if (peakLevel < MIN_PEAK_LEVEL) {
+          console.log(
+            `[OpenWhisper] Discarded: silent (peak=${peakLevel.toFixed(3)} < ${MIN_PEAK_LEVEL})`
+          );
+          resolve(new Blob());
+          return;
+        }
+
+        if (speechRatio < MIN_SPEECH_RATIO) {
+          console.log(
+            `[OpenWhisper] Discarded: mostly silence (speechRatio=${(speechRatio * 100).toFixed(1)}% < ${MIN_SPEECH_RATIO * 100}%)`
+          );
+          resolve(new Blob());
+          return;
+        }
+
+        const blob = new Blob(chunksRef.current, {
+          type: mediaRecorder.mimeType,
+        });
+        resolve(blob);
+      };
+
+      mediaRecorder.stop();
+    });
+  }, [cleanup]);
+
+  const cancelRecording = useCallback(() => {
+    const mediaRecorder = mediaRecorderRef.current;
+    if (mediaRecorder && mediaRecorder.state !== "inactive") {
+      mediaRecorder.stop();
+    }
+    chunksRef.current = [];
+    cleanup();
+  }, [cleanup]);
 
   return { state, startRecording, stopRecording, cancelRecording };
 }

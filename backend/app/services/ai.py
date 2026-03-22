@@ -27,27 +27,47 @@ TONE_INSTRUCTIONS = {
 # ─── Prompt Builder ──────────────────────────────────────────────────
 
 
-def build_cleanup_prompt(text: str, tone: str = "auto", dictionary: list[str] | None = None) -> str:
-    """Build the AI cleanup prompt for a raw transcription."""
+def build_cleanup_prompt(
+    text: str,
+    tone: str = "auto",
+    dictionary: list[str] | None = None,
+    previous_context: str = "",
+) -> str:
+    """Build the AI cleanup prompt for a raw transcription, with optional session context."""
     tone_inst = TONE_INSTRUCTIONS.get(tone, TONE_INSTRUCTIONS["auto"])
     dict_note = ""
     if dictionary:
-        dict_note = f"\nIMPORTANT: Preserve these custom terms exactly: {', '.join(dictionary)}"
+        dict_note = (
+            f"\nThe user has a personal dictionary. If any of these words appear in the "
+            f"dictation, preserve their exact spelling: {', '.join(dictionary)}. "
+            f"If these words do NOT appear in the dictation, ignore them completely — "
+            f"do NOT mention them or add them."
+        )
 
-    return f"""You are a text cleanup assistant for a voice dictation tool. Clean up the following dictated text.
+    context_block = ""
+    if previous_context and previous_context.strip():
+        context_block = f"""
+Previously dictated text (for context only — do NOT include this in your output):
+\"\"\"\n{previous_context.strip()}\n\"\"\"
+Use this context only to understand tone, resolve pronouns, and ensure continuity."""
+
+    return f"""You are a text cleanup tool. Your ONLY job is to output the cleaned version of the dictated text below. You must NEVER output explanations, reasoning, commentary, notes, or meta-text. You must NEVER discuss what you changed or why. Your entire response must be ONLY the cleaned text and nothing else.
 
 Rules:
-- Remove filler words (um, uh, like, you know, so, basically, I mean, right, actually)
-- Fix grammar, punctuation, and capitalization
-- Handle self-corrections: if the speaker says "no wait", "I mean", "actually", "let me rephrase", keep only their final intent
-- Do NOT add information or change the meaning
-- Do NOT add greetings, sign-offs, or any text not present in the dictation
-- {tone_inst}{dict_note}
+1. Remove filler words: um, uh, like, you know, so, basically, I mean, right, actually
+2. Fix grammar, punctuation, and capitalization
+3. Handle self-corrections: "no wait", "I mean", "actually" → keep only the final intent
+4. Do NOT add any words, sentences, or information that the speaker did not say
+5. Do NOT remove meaningful content — only remove filler and fix grammar
+6. If the transcription contains garbled/nonsense fragments at the very end (artifacts from speech recognition), silently remove them
+7. {tone_inst}{dict_note}
+{context_block}
+Dictated text to clean:
+\"\"\"
+{text}
+\"\"\"
 
-Return ONLY the cleaned text. No explanations, no quotes, no prefixes.
-
-Dictated text:
-{text}"""
+Cleaned text:"""
 
 
 def build_command_prompt(selected_text: str, command: str) -> str:
@@ -161,12 +181,13 @@ async def clean_transcription(
     tone: str = "auto",
     dictionary: list[str] | None = None,
     provider: str | None = None,
+    previous_context: str = "",
 ) -> str:
-    """Clean a raw transcription using AI post-processing."""
+    """Clean a raw transcription using AI post-processing, with optional session context."""
     if not text or not text.strip():
         return text
 
-    prompt = build_cleanup_prompt(text, tone, dictionary)
+    prompt = build_cleanup_prompt(text, tone, dictionary, previous_context)
     result = await call_ai(prompt, provider)
     return result or text  # Fall back to raw text if AI fails
 

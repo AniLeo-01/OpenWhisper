@@ -12,6 +12,10 @@ interface FlowBarProps {
   duration: number;
   onClickStart: () => void;
   onClickStop: () => void;
+  /** Hotkey label for dictate mode (e.g., "Ctrl") */
+  dictateKey?: string;
+  /** Hotkey label for hands-free mode (e.g., "Alt") */
+  handsFreeKey?: string;
 }
 
 /**
@@ -31,6 +35,8 @@ export function FlowBar({
   duration,
   onClickStart,
   onClickStop,
+  dictateKey = "Ctrl",
+  handsFreeKey = "Alt",
 }: FlowBarProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const barsRef = useRef<number[]>(Array(24).fill(0));
@@ -132,9 +138,14 @@ export function FlowBar({
           <span className="text-sm text-gray-500">
             Hold{" "}
             <kbd className="px-1.5 py-0.5 bg-gray-800 rounded text-gray-400 text-xs font-mono">
-              Ctrl
+              {dictateKey}
             </kbd>{" "}
-            to dictate
+            to dictate{" "}
+            <span className="text-gray-700 mx-1">|</span>{" "}
+            <kbd className="px-1.5 py-0.5 bg-gray-800 rounded text-gray-400 text-xs font-mono">
+              {handsFreeKey}
+            </kbd>{" "}
+            hands-free
           </span>
         )}
 

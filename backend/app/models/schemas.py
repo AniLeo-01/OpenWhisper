@@ -17,6 +17,7 @@ class TranscriptionResponse(BaseModel):
 
 class ProcessRequest(BaseModel):
     text: str
+    previous_context: str = ""  # Already-cleaned text from earlier in session
     provider: str = "groq"  # groq, openai, ollama, none
     tone: str = "auto"  # auto, casual, professional, technical
     dictionary: list[str] = []

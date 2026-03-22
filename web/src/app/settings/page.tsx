@@ -193,19 +193,53 @@ export default function SettingsPage() {
         )}
       </Section>
 
-      {/* ─── Hotkey ──────────────────────────────────────────────── */}
-      <Section title="Hotkey">
+      {/* ─── Hotkeys ─────────────────────────────────────────────── */}
+      <Section title="Hotkeys">
+        <p className="text-xs text-gray-500 -mt-2 mb-3">
+          Each mode has its own hotkey. Make sure they don&apos;t overlap.
+        </p>
+
         <Select
-          label="Push-to-talk key"
-          value={settings.hotkey}
-          onChange={(v) => updateSettings({ hotkey: v })}
+          label="Dictate (hold)"
+          value={settings.hotkeyDictate}
+          onChange={(v) => updateSettings({ hotkeyDictate: v })}
           options={[
             { value: "Control", label: "Ctrl / Control" },
             { value: "Alt", label: "Alt / Option" },
-            { value: "Shift", label: "Shift" },
-            { value: " ", label: "Space (caution: may conflict with typing)" },
+            { value: "Meta", label: "Cmd / Win" },
+            { value: " ", label: "Space" },
           ]}
         />
+        <Select
+          label="Hands-free (toggle)"
+          value={settings.hotkeyHandsFree}
+          onChange={(v) => updateSettings({ hotkeyHandsFree: v })}
+          options={[
+            { value: "Alt", label: "Alt / Option" },
+            { value: "Control", label: "Ctrl / Control" },
+            { value: "Meta", label: "Cmd / Win" },
+            { value: "F2", label: "F2" },
+          ]}
+        />
+        <Select
+          label="Command Mode (hold)"
+          value={settings.hotkeyCommand}
+          onChange={(v) => updateSettings({ hotkeyCommand: v })}
+          options={[
+            { value: "Shift", label: "Shift" },
+            { value: "Alt", label: "Alt / Option" },
+            { value: "Meta", label: "Cmd / Win" },
+            { value: "F3", label: "F3" },
+          ]}
+        />
+
+        <div className="bg-gray-900/50 border border-gray-800 rounded-lg px-4 py-3 text-xs text-gray-500 space-y-1 mt-2">
+          <p><strong className="text-gray-400">Dictate:</strong> Hold key → speak → release to transcribe</p>
+          <p><strong className="text-gray-400">Hands-free:</strong> Press once to start listening, press again to stop</p>
+          <p><strong className="text-gray-400">Command:</strong> Select text → hold key → speak command → release</p>
+          <p><strong className="text-gray-400">New session:</strong> Ctrl+N clears the editor</p>
+          <p><strong className="text-gray-400">Cancel:</strong> Esc stops any active recording</p>
+        </div>
       </Section>
 
       {/* ─── Personal Dictionary ────────────────────────────────── */}

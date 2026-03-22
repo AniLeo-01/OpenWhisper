@@ -43,6 +43,7 @@ async def process_text(req: ProcessRequest):
             tone=req.tone,
             dictionary=req.dictionary or None,
             provider=req.provider,
+            previous_context=req.previous_context,
         )
         return ProcessResponse(text=cleaned)
     except Exception as e:

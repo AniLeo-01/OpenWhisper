@@ -4,10 +4,12 @@ import { useRef, useEffect, useState } from "react";
 import { Copy, Check, RotateCcw, Sparkles } from "lucide-react";
 
 interface TextEditorProps {
-  /** The cleaned/final text to show */
+  /** The full accumulated session text (cleaned) */
   text: string;
-  /** Raw transcription (before AI cleanup) */
+  /** The full accumulated session text (raw) */
   rawText: string;
+  /** Only the latest segment (for typing animation) */
+  latestSegment: string;
   /** Whether text is currently being inserted (animate typing) */
   isInserting: boolean;
   /** Called when user selects text and triggers command mode */
@@ -17,13 +19,16 @@ interface TextEditorProps {
 }
 
 /**
- * The main text area where dictated text appears.
- * Simulates the experience of text being typed into any app.
- * Supports Command Mode: select text → transform with voice.
+ * The main text area where dictated text accumulates.
+ *
+ * Session-aware: shows the full accumulated text with the latest
+ * segment animated in via a typing effect. Previous segments remain
+ * stable above.
  */
 export function TextEditor({
   text,
   rawText,
+  latestSegment,
   isInserting,
   onCommandMode,
   placeholder = "Start dictating and your text will appear here...",
@@ -32,35 +37,49 @@ export function TextEditor({
   const [copied, setCopied] = useState(false);
   const [showRaw, setShowRaw] = useState(false);
   const [selectedText, setSelectedText] = useState("");
-  const [displayText, setDisplayText] = useState(text);
 
-  // Typing animation when new text arrives
+  // The stable part of the text (everything except the latest segment being typed)
+  // We compute this by removing the latest segment from the full text
+  const stableText = latestSegment && text.endsWith(latestSegment)
+    ? text.slice(0, text.length - latestSegment.length)
+    : text;
+
+  // Animated portion: the latest segment that's being typed in
+  const [animatedText, setAnimatedText] = useState("");
+  const animTargetRef = useRef("");
+
   useEffect(() => {
-    if (!isInserting || !text) {
-      setDisplayText(text);
+    if (!isInserting || !latestSegment) {
+      setAnimatedText(latestSegment);
       return;
     }
 
-    let index = displayText.length;
-    const target = text;
+    // Reset animation when a new segment arrives
+    if (latestSegment !== animTargetRef.current) {
+      animTargetRef.current = latestSegment;
+      setAnimatedText("");
 
-    if (index >= target.length) {
-      setDisplayText(target);
-      return;
+      let index = 0;
+      const interval = setInterval(() => {
+        index += 2;
+        if (index >= latestSegment.length) {
+          setAnimatedText(latestSegment);
+          clearInterval(interval);
+        } else {
+          setAnimatedText(latestSegment.slice(0, index));
+        }
+      }, 15);
+
+      return () => clearInterval(interval);
     }
+  }, [latestSegment, isInserting]);
 
-    const interval = setInterval(() => {
-      index += 2; // type 2 chars at a time for speed
-      if (index >= target.length) {
-        setDisplayText(target);
-        clearInterval(interval);
-      } else {
-        setDisplayText(target.slice(0, index));
-      }
-    }, 15);
-
-    return () => clearInterval(interval);
-  }, [text, isInserting]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Auto-scroll to bottom when new text arrives
+  useEffect(() => {
+    if (editorRef.current && isInserting) {
+      editorRef.current.scrollTop = editorRef.current.scrollHeight;
+    }
+  }, [animatedText, isInserting]);
 
   // Track text selection for Command Mode
   const handleSelect = () => {
@@ -77,7 +96,13 @@ export function TextEditor({
   };
 
   const hasContent = text.length > 0 || rawText.length > 0;
-  const shownText = showRaw ? rawText : displayText;
+
+  // What to actually render in the editor
+  const displayStable = showRaw
+    ? rawText // In raw mode, show the full raw text, no animation
+    : stableText;
+  const displayAnimated = showRaw ? "" : animatedText;
+  const showCursor = isInserting && !showRaw;
 
   return (
     <div className="w-full max-w-3xl mx-auto flex flex-col flex-1">
@@ -116,7 +141,7 @@ export function TextEditor({
             ) : (
               <>
                 <Copy className="w-3 h-3" />
-                Copy
+                Copy all
               </>
             )}
           </button>
@@ -128,7 +153,7 @@ export function TextEditor({
         ref={editorRef}
         onMouseUp={handleSelect}
         className={`
-          flex-1 min-h-[300px] rounded-xl px-6 py-5
+          flex-1 min-h-[300px] rounded-xl px-6 py-5 overflow-y-auto
           text-lg leading-relaxed selection:bg-purple-500/20
           ${hasContent ? "text-gray-100" : "text-gray-600"}
           ${isInserting ? "border border-cyan-500/20 bg-cyan-500/[0.02]" : "border border-gray-800/50 bg-gray-950/30"}
@@ -137,13 +162,23 @@ export function TextEditor({
       >
         {hasContent ? (
           <p className="whitespace-pre-wrap">
-            {shownText}
-            {isInserting && (
+            {/* Stable (previously completed) segments */}
+            {displayStable}
+            {/* Spacer between stable and new segment */}
+            {displayStable && displayAnimated ? " " : ""}
+            {/* Latest segment being typed in */}
+            {displayAnimated && (
+              <span className={isInserting ? "text-cyan-100" : ""}>
+                {displayAnimated}
+              </span>
+            )}
+            {/* Typing cursor */}
+            {showCursor && (
               <span className="inline-block w-0.5 h-5 bg-cyan-400 ml-0.5 animate-pulse" />
             )}
           </p>
         ) : (
-          <p className="select-none">{placeholder}</p>
+          <p className="select-none whitespace-pre-wrap">{placeholder}</p>
         )}
       </div>
     </div>
