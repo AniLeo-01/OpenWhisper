@@ -1,0 +1,77 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [main]
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
+  ECS_CLUSTER: ${{ secrets.ECS_CLUSTER }}
+  ECS_SERVICE: ${{ secrets.ECS_SERVICE }}
+  TASK_DEFINITION_FILE: infra/task-definition.json
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push backend image
+        id: build-backend
+        run: |
+          IMAGE_TAG="${{ github.sha }}"
+          REPO="${{ env.ECR_REGISTRY }}/openwhisper-backend"
+          docker build -t "$REPO:$IMAGE_TAG" -t "$REPO:latest" ./backend
+          docker push "$REPO:$IMAGE_TAG"
+          docker push "$REPO:latest"
+          echo "image=$REPO:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push web image
+        id: build-web
+        run: |
+          IMAGE_TAG="${{ github.sha }}"
+          REPO="${{ env.ECR_REGISTRY }}/openwhisper-web"
+          docker build -t "$REPO:$IMAGE_TAG" -t "$REPO:latest" ./web
+          docker push "$REPO:$IMAGE_TAG"
+          docker push "$REPO:latest"
+          echo "image=$REPO:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Update backend image in task definition
+        id: task-def-backend
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ env.TASK_DEFINITION_FILE }}
+          container-name: backend
+          image: ${{ steps.build-backend.outputs.image }}
+
+      - name: Update web image in task definition
+        id: task-def-web
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def-backend.outputs.task-definition }}
+          container-name: web
+          image: ${{ steps.build-web.outputs.image }}
+
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.task-def-web.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
