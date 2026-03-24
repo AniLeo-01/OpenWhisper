@@ -237,50 +237,6 @@ See [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md) for the full roadmap incl
 
 ---
 
-## Contributing
-
-Contributions are welcome! This project has two main areas:
-
-### Frontend (web/)
-The entire frontend was built with AI assistance (Claude). If you're comfortable with React/Next.js/TypeScript, areas that need help include:
-- Improving the Flow Bar animations and responsiveness
-- Adding real-time streaming transcription (show words as they're spoken)
-- Building the Chrome extension for dictation in any web text field
-- Accessibility improvements (screen reader support, keyboard navigation)
-- Mobile-responsive design refinements
-- E2E tests with Playwright
-
-### Backend (backend/)
-The Python backend powers self-hosted mode:
-- Adding streaming Whisper transcription (word-by-word output)
-- Supporting more STT models (Parakeet, Canary, etc.)
-- WebSocket support for real-time audio streaming
-- Improving audio preprocessing (noise reduction, VAD)
-- GPU optimization and model quantization
-- Load testing and performance benchmarking
-
-### Getting started as a contributor
-
-```bash
-# Fork and clone
-git clone https://github.com/your-username/openwhisper.git
-cd openwhisper
-
-# Frontend
-cd web && npm install && npm run dev
-
-# Backend
-cd backend && pip install -e ".[dev]" && uvicorn app.main:app --reload
-
-# Run checks
-cd web && npm run build          # TypeScript + build check
-cd backend && ruff check app/    # Python linting
-```
-
-Please open an issue before starting work on major features so we can coordinate.
-
----
-
 ## Acknowledgments
 
 This project was built with assistance from [Claude](https://claude.ai) (Anthropic) for the frontend architecture, component design, and API layer. The project maintainer ([@aniruddha](https://github.com/aniruddha)) focuses on the backend, AI pipeline, and infrastructure.
