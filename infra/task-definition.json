@@ -1,0 +1,87 @@
+{
+  "family": "openwhisper",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1536",
+  "memory": "3072",
+  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "backend",
+      "image": "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/openwhisper-backend:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 8000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "OPENWHISPER_HOST", "value": "0.0.0.0" },
+        { "name": "OPENWHISPER_PORT", "value": "8000" },
+        { "name": "OPENWHISPER_WHISPER_MODEL", "value": "base" },
+        { "name": "OPENWHISPER_WHISPER_DEVICE", "value": "cpu" },
+        { "name": "OPENWHISPER_CORS_ORIGINS", "value": "[\"https://yourdomain.com\",\"https://www.yourdomain.com\"]" }
+      ],
+      "secrets": [
+        {
+          "name": "OPENWHISPER_GROQ_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:openwhisper/groq-api-key"
+        },
+        {
+          "name": "OPENWHISPER_OPENAI_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:openwhisper/openai-api-key"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 120
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/openwhisper",
+          "awslogs-region": "REGION",
+          "awslogs-stream-prefix": "backend"
+        }
+      },
+      "cpu": 1024,
+      "memory": 2048
+    },
+    {
+      "name": "web",
+      "image": "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/openwhisper-web:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 3000,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        { "name": "NODE_ENV", "value": "production" },
+        { "name": "WHISPER_SERVER_INTERNAL_URL", "value": "http://localhost:8000" }
+      ],
+      "dependsOn": [
+        {
+          "containerName": "backend",
+          "condition": "HEALTHY"
+        }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/openwhisper",
+          "awslogs-region": "REGION",
+          "awslogs-stream-prefix": "web"
+        }
+      },
+      "cpu": 512,
+      "memory": 1024
+    }
+  ]
+}
