@@ -21,7 +21,7 @@
         { "name": "OPENWHISPER_PORT", "value": "8000" },
         { "name": "OPENWHISPER_WHISPER_MODEL", "value": "base" },
         { "name": "OPENWHISPER_WHISPER_DEVICE", "value": "cpu" },
-        { "name": "OPENWHISPER_CORS_ORIGINS", "value": "[\"https://yourdomain.com\",\"https://www.yourdomain.com\"]" }
+        { "name": "OPENWHISPER_CORS_ORIGINS", "value": "[\"https://openwhispr.space\",\"https://www.openwhispr.space\"]" }
       ],
       "healthCheck": {
         "command": ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"],
