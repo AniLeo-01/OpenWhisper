@@ -37,7 +37,7 @@ jobs:
         run: |
           IMAGE_TAG="${{ github.sha }}"
           REPO="${{ env.ECR_REGISTRY }}/openwhisper-backend"
-          docker build -t "$REPO:$IMAGE_TAG" -t "$REPO:latest" ./backend
+          docker build --platform linux/amd64 -t "$REPO:$IMAGE_TAG" -t "$REPO:latest" ./backend
           docker push "$REPO:$IMAGE_TAG"
           docker push "$REPO:latest"
           echo "image=$REPO:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
@@ -47,7 +47,7 @@ jobs:
         run: |
           IMAGE_TAG="${{ github.sha }}"
           REPO="${{ env.ECR_REGISTRY }}/openwhisper-web"
-          docker build -t "$REPO:$IMAGE_TAG" -t "$REPO:latest" ./web
+          docker build --platform linux/amd64 -t "$REPO:$IMAGE_TAG" -t "$REPO:latest" ./web
           docker push "$REPO:$IMAGE_TAG"
           docker push "$REPO:latest"
           echo "image=$REPO:$IMAGE_TAG" >> "$GITHUB_OUTPUT"
