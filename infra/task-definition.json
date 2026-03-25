@@ -4,11 +4,11 @@
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "1536",
   "memory": "3072",
-  "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "executionRoleArn": "arn:aws:iam::241820142018:role/ecsTaskExecutionRole",
   "containerDefinitions": [
     {
       "name": "backend",
-      "image": "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/openwhisper-backend:latest",
+      "image": "241820142018.dkr.ecr.us-east-1.amazonaws.com/openwhisper-backend:latest",
       "essential": true,
       "portMappings": [
         {
@@ -21,7 +21,7 @@
         { "name": "OPENWHISPER_PORT", "value": "8000" },
         { "name": "OPENWHISPER_WHISPER_MODEL", "value": "base" },
         { "name": "OPENWHISPER_WHISPER_DEVICE", "value": "cpu" },
-        { "name": "OPENWHISPER_CORS_ORIGINS", "value": "[\"https://yourdomain.com\",\"https://www.yourdomain.com\"]" }
+        { "name": "OPENWHISPER_CORS_ORIGINS", "value": "[\"https://openwhispr.space\",\"https://www.openwhispr.space\"]" }
       ],
       "healthCheck": {
         "command": ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"],
@@ -34,7 +34,7 @@
         "logDriver": "awslogs",
         "options": {
           "awslogs-group": "/ecs/openwhisper",
-          "awslogs-region": "REGION",
+          "awslogs-region": "us-east-1",
           "awslogs-stream-prefix": "backend"
         }
       },
@@ -43,7 +43,7 @@
     },
     {
       "name": "web",
-      "image": "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/openwhisper-web:latest",
+      "image": "241820142018.dkr.ecr.us-east-1.amazonaws.com/openwhisper-web:latest",
       "essential": true,
       "portMappings": [
         {
@@ -65,7 +65,7 @@
         "logDriver": "awslogs",
         "options": {
           "awslogs-group": "/ecs/openwhisper",
-          "awslogs-region": "REGION",
+          "awslogs-region": "us-east-1",
           "awslogs-stream-prefix": "web"
         }
       },
