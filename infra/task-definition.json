@@ -5,7 +5,6 @@
   "cpu": "1536",
   "memory": "3072",
   "executionRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskExecutionRole",
-  "taskRoleArn": "arn:aws:iam::ACCOUNT_ID:role/ecsTaskRole",
   "containerDefinitions": [
     {
       "name": "backend",
@@ -23,16 +22,6 @@
         { "name": "OPENWHISPER_WHISPER_MODEL", "value": "base" },
         { "name": "OPENWHISPER_WHISPER_DEVICE", "value": "cpu" },
         { "name": "OPENWHISPER_CORS_ORIGINS", "value": "[\"https://yourdomain.com\",\"https://www.yourdomain.com\"]" }
-      ],
-      "secrets": [
-        {
-          "name": "OPENWHISPER_GROQ_API_KEY",
-          "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:openwhisper/groq-api-key"
-        },
-        {
-          "name": "OPENWHISPER_OPENAI_API_KEY",
-          "valueFrom": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:openwhisper/openai-api-key"
-        }
       ],
       "healthCheck": {
         "command": ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"],
