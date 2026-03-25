@@ -8,7 +8,7 @@
   "containerDefinitions": [
     {
       "name": "backend",
-      "image": "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/openwhisper-backend:latest",
+      "image": "241820142018.dkr.ecr.us-east-1.amazonaws.com/openwhisper-backend:latest",
       "essential": true,
       "portMappings": [
         {
@@ -34,7 +34,7 @@
         "logDriver": "awslogs",
         "options": {
           "awslogs-group": "/ecs/openwhisper",
-          "awslogs-region": "REGION",
+          "awslogs-region": "us-east-1",
           "awslogs-stream-prefix": "backend"
         }
       },
@@ -43,7 +43,7 @@
     },
     {
       "name": "web",
-      "image": "ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/openwhisper-web:latest",
+      "image": "241820142018.dkr.ecr.us-east-1.amazonaws.com/openwhisper-web:latest",
       "essential": true,
       "portMappings": [
         {
@@ -65,7 +65,7 @@
         "logDriver": "awslogs",
         "options": {
           "awslogs-group": "/ecs/openwhisper",
-          "awslogs-region": "REGION",
+          "awslogs-region": "us-east-1",
           "awslogs-stream-prefix": "web"
         }
       },
