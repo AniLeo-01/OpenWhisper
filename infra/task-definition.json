@@ -21,10 +21,16 @@
         { "name": "OPENWHISPER_PORT", "value": "8000" },
         { "name": "OPENWHISPER_WHISPER_MODEL", "value": "base" },
         { "name": "OPENWHISPER_WHISPER_DEVICE", "value": "cpu" },
-        { "name": "OPENWHISPER_CORS_ORIGINS", "value": "[\"https://openwhispr.space\",\"https://www.openwhispr.space\"]" }
+        {
+          "name": "OPENWHISPER_CORS_ORIGINS",
+          "value": "[\"https://openwhispr.space\",\"https://www.openwhispr.space\"]"
+        }
       ],
       "healthCheck": {
-        "command": ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"],
+        "command": [
+          "CMD-SHELL",
+          "curl -f http://localhost:8000/health || exit 1"
+        ],
         "interval": 30,
         "timeout": 10,
         "retries": 3,
@@ -53,7 +59,10 @@
       ],
       "environment": [
         { "name": "NODE_ENV", "value": "production" },
-        { "name": "WHISPER_SERVER_INTERNAL_URL", "value": "http://localhost:8000" }
+        {
+          "name": "WHISPER_SERVER_INTERNAL_URL",
+          "value": "http://localhost:8000"
+        }
       ],
       "dependsOn": [
         {
