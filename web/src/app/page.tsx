@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useHotkey } from "@/hooks/useHotkey";
+import { useCommandMode } from "@/hooks/useCommandMode";
 import { useAppStore } from "@/lib/store";
 import { runDictationPipeline } from "@/lib/transcribe";
 import { FlowBar, FlowBarState } from "@/components/FlowBar";
@@ -21,10 +22,9 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [commandSelectedText, setCommandSelectedText] = useState("");
 
   // Track which mode triggered recording
-  const activeModeRef = useRef<"dictate" | "hands-free" | "command" | null>(null);
+  const activeModeRef = useRef<"dictate" | "hands-free" | null>(null);
 
   const settings = useAppStore((s) => s.settings);
   const sessionCleanedText = useAppStore((s) => s.sessionCleanedText);
@@ -37,6 +37,16 @@ export default function Home() {
   const loadIntoSession = useAppStore((s) => s.loadIntoSession);
   const addToHistory = useAppStore((s) => s.addToHistory);
   const updateSettings = useAppStore((s) => s.updateSettings);
+  const commandResult = useAppStore((s) => s.commandResult);
+
+  // Command mode (independent toggle)
+  const commandMode = useCommandMode({
+    flowState,
+    setFlowState,
+    setError,
+    startRecording,
+    stopRecording,
+  });
 
   // Check if first run (no API key set)
   useEffect(() => {
@@ -59,7 +69,7 @@ export default function Home() {
   // ─── Generic Start Recording ──────────────────────────────────────
 
   const handleStart = useCallback(
-    async (mode: "dictate" | "hands-free" | "command") => {
+    async (mode: "dictate" | "hands-free") => {
       if (flowState === "processing" || flowState === "recording" || flowState === "hands-free" || flowState === "command") return;
       setError(null);
       activeModeRef.current = mode;
@@ -68,7 +78,6 @@ export default function Home() {
         const stateMap: Record<string, FlowBarState> = {
           dictate: "recording",
           "hands-free": "hands-free",
-          command: "command",
         };
         setFlowState(stateMap[mode]);
       } catch (err) {
@@ -86,6 +95,8 @@ export default function Home() {
     const mode = activeModeRef.current;
     activeModeRef.current = null;
 
+    if (!mode) return;
+
     try {
       const audioBlob = await stopRecording();
       if (audioBlob.size === 0) {
@@ -95,65 +106,22 @@ export default function Home() {
 
       setFlowState("processing");
 
-      if (mode === "command" && commandSelectedText) {
-        // Command Mode: transcribe the command, then transform selected text
-        const commandResult = await runDictationPipeline(audioBlob, {
-          ...settings,
-          postProcess: false,
+      // Normal dictation or hands-free: APPEND to session
+      const previousContext = getSessionContext();
+      setIsInserting(true);
+      const result = await runDictationPipeline(audioBlob, settings, previousContext);
+
+      // Only append if there's actual content
+      if (result.cleanedText.trim() || result.rawText.trim()) {
+        appendSegment({
+          id: result.id,
+          rawText: result.rawText,
+          cleanedText: result.cleanedText,
+          timestamp: result.timestamp,
         });
 
-        const commandText = commandResult.rawText;
-
-        const res = await fetch("/api/command", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            selectedText: commandSelectedText,
-            command: commandText,
-            provider: settings.aiProvider,
-            groqApiKey: settings.groqApiKey,
-            openaiApiKey: settings.openaiApiKey,
-            ollamaUrl: settings.ollamaUrl,
-          }),
-        });
-
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error || "Command failed");
-        }
-
-        const { text: transformedText } = await res.json();
-        loadIntoSession(transformedText);
-        setIsInserting(true);
-        addToHistory({
-          id: crypto.randomUUID(),
-          rawText: `[Command: ${commandText}] ${commandSelectedText}`,
-          cleanedText: transformedText,
-          duration: 0,
-          language: settings.language,
-          timestamp: Date.now(),
-          engine: settings.sttEngine,
-        });
-      } else {
-        // Normal dictation or hands-free: APPEND to session
-        const previousContext = getSessionContext();
-        setIsInserting(true);
-        const result = await runDictationPipeline(audioBlob, settings, previousContext);
-
-        // Only append if there's actual content (silence/hallucination → empty)
-        if (result.cleanedText.trim() || result.rawText.trim()) {
-          appendSegment({
-            id: result.id,
-            rawText: result.rawText,
-            cleanedText: result.cleanedText,
-            timestamp: result.timestamp,
-          });
-
-          addToHistory(result);
-        }
+        addToHistory(result);
       }
-
-      setCommandSelectedText("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Transcription failed");
     } finally {
@@ -163,16 +131,14 @@ export default function Home() {
   }, [
     stopRecording,
     settings,
-    commandSelectedText,
     getSessionContext,
     appendSegment,
-    loadIntoSession,
     addToHistory,
   ]);
 
   // ─── Hotkey: Hold to dictate (Ctrl by default) ────────────────────
 
-  const isNotRecording = flowState === "idle";
+  const isNotRecording = flowState === "idle" && !commandMode.isActive;
 
   useHotkey({
     key: settings.hotkeyDictate || "Control",
@@ -192,37 +158,24 @@ export default function Home() {
     mode: "toggle",
   });
 
-  // ─── Hotkey: Hold for command mode (Shift by default) ─────────────
-
-  useHotkey({
-    key: settings.hotkeyCommand || "Shift",
-    onStart: () => {
-      // Only enter command mode if there's selected text
-      const selection = window.getSelection()?.toString().trim();
-      if (selection) {
-        setCommandSelectedText(selection);
-        handleStart("command");
-      }
-    },
-    onStop: () => {
-      if (flowState === "command") {
-        handleStop();
-      }
-    },
-    enabled: isNotRecording || flowState === "command",
-    mode: "hold",
-  });
-
   // ─── Keyboard: Escape to cancel, N for new session ────────────────
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Escape: cancel recording
-      if (e.key === "Escape" && flowState !== "idle" && flowState !== "processing") {
-        cancelRecording();
-        activeModeRef.current = null;
-        handsFreeHotkey.forceStop();
-        setFlowState("idle");
+      // Escape: cancel recording or exit command mode
+      if (e.key === "Escape") {
+        if (commandMode.isActive) {
+          commandMode.forceStop();
+          cancelRecording();
+          setFlowState("idle");
+          return;
+        }
+        if (flowState !== "idle" && flowState !== "processing") {
+          cancelRecording();
+          activeModeRef.current = null;
+          handsFreeHotkey.forceStop();
+          setFlowState("idle");
+        }
       }
 
       // New session hotkey (Ctrl+N / Cmd+N)
@@ -237,17 +190,7 @@ export default function Home() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [flowState, cancelRecording, handsFreeHotkey, settings.hotkeyNewSession]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ─── Command Mode trigger (from TextEditor button) ────────────────
-
-  const handleCommandMode = useCallback(
-    (selectedText: string) => {
-      setCommandSelectedText(selectedText);
-      handleStart("command");
-    },
-    [handleStart]
-  );
+  }, [flowState, cancelRecording, handsFreeHotkey, settings.hotkeyNewSession, commandMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── History selection ────────────────────────────────────────────
 
@@ -311,6 +254,11 @@ export default function Home() {
               {sessionSegments.length} segment{sessionSegments.length !== 1 ? "s" : ""}
             </span>
           )}
+          {commandMode.isActive && (
+            <span className="text-xs text-purple-400 bg-purple-500/10 border border-purple-500/20 rounded-full px-2.5 py-0.5 ml-2">
+              Command Mode
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-1">
@@ -355,10 +303,10 @@ export default function Home() {
           rawText={sessionRawText}
           latestSegment={latestCleanedSegment}
           isInserting={isInserting}
-          onCommandMode={handleCommandMode}
+          commandResult={commandResult}
           placeholder={
             hasApiKey
-              ? `Hold ${fmtKey(settings.hotkeyDictate)} to dictate. Your polished text will appear here.\n\nPress ${fmtKey(settings.hotkeyHandsFree)} to toggle hands-free mode.\nSelect text + hold ${fmtKey(settings.hotkeyCommand)} for Command Mode.\n${fmtKey("Control")}+${settings.hotkeyNewSession.toUpperCase()} to start a new session.`
+              ? `Hold ${fmtKey(settings.hotkeyDictate)} to dictate. Your polished text will appear here.\n\nPress ${fmtKey(settings.hotkeyHandsFree)} to toggle hands-free mode.\nPress ${fmtKey(settings.hotkeyCommand)} for Command Mode (search, transform, etc.).\n${fmtKey("Control")}+${settings.hotkeyNewSession.toUpperCase()} to start a new session.`
               : "Add your Groq API key in Settings to get started. It's free at console.groq.com"
           }
         />
@@ -392,9 +340,24 @@ export default function Home() {
         audioLevel={recorderState.audioLevel}
         duration={recorderState.duration}
         onClickStart={() => handleStart("dictate")}
-        onClickStop={handleStop}
+        onClickStop={() => {
+          if (commandMode.isActive) {
+            commandMode.deactivate();
+          } else {
+            handleStop();
+          }
+        }}
+        commandModeActive={commandMode.isActive}
+        onCommandToggle={() => {
+          if (commandMode.isActive) {
+            commandMode.deactivate();
+          } else {
+            commandMode.activate();
+          }
+        }}
         dictateKey={fmtKey(settings.hotkeyDictate)}
         handsFreeKey={fmtKey(settings.hotkeyHandsFree)}
+        commandKey={fmtKey(settings.hotkeyCommand)}
       />
 
       {/* History Panel */}

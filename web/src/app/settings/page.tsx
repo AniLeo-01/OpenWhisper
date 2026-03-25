@@ -11,6 +11,7 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [showGroqKey, setShowGroqKey] = useState(false);
   const [showOpenAIKey, setShowOpenAIKey] = useState(false);
+  const [showTavilyKey, setShowTavilyKey] = useState(false);
   const [newWord, setNewWord] = useState("");
 
   const handleSave = () => {
@@ -193,6 +194,39 @@ export default function SettingsPage() {
         )}
       </Section>
 
+      {/* ─── Extensions ────────────────────────────────────────── */}
+      <Section title="Extensions">
+        <p className="text-xs text-gray-500 -mt-2 mb-3">
+          Command mode extensions add capabilities triggered by voice commands.
+        </p>
+
+        <ApiKeyInput
+          label="Tavily API Key"
+          value={settings.tavilyApiKey}
+          onChange={(v) => updateSettings({ tavilyApiKey: v })}
+          show={showTavilyKey}
+          onToggle={() => setShowTavilyKey(!showTavilyKey)}
+          helpText={
+            <>
+              Required for web search. Get a free key at{" "}
+              <a
+                href="https://app.tavily.com"
+                target="_blank"
+                className="text-cyan-400 hover:underline"
+              >
+                app.tavily.com
+              </a>
+            </>
+          }
+        />
+
+        <div className="bg-gray-900/50 border border-gray-800 rounded-lg px-4 py-3 text-xs text-gray-500 space-y-1 mt-2">
+          <p className="text-gray-400 font-medium mb-1">Available extensions:</p>
+          <p><strong className="text-purple-400">Web Search:</strong> &ldquo;search for...&rdquo;, &ldquo;what is...&rdquo;, &ldquo;look up...&rdquo;</p>
+          <p><strong className="text-purple-400">Transform:</strong> &ldquo;make it concise&rdquo;, &ldquo;translate to...&rdquo;, &ldquo;rewrite as...&rdquo; (requires selected text)</p>
+        </div>
+      </Section>
+
       {/* ─── Hotkeys ─────────────────────────────────────────────── */}
       <Section title="Hotkeys">
         <p className="text-xs text-gray-500 -mt-2 mb-3">
@@ -222,7 +256,7 @@ export default function SettingsPage() {
           ]}
         />
         <Select
-          label="Command Mode (hold)"
+          label="Command Mode (toggle)"
           value={settings.hotkeyCommand}
           onChange={(v) => updateSettings({ hotkeyCommand: v })}
           options={[
@@ -236,9 +270,9 @@ export default function SettingsPage() {
         <div className="bg-gray-900/50 border border-gray-800 rounded-lg px-4 py-3 text-xs text-gray-500 space-y-1 mt-2">
           <p><strong className="text-gray-400">Dictate:</strong> Hold key → speak → release to transcribe</p>
           <p><strong className="text-gray-400">Hands-free:</strong> Press once to start listening, press again to stop</p>
-          <p><strong className="text-gray-400">Command:</strong> Select text → hold key → speak command → release</p>
+          <p><strong className="text-gray-400">Command:</strong> Press to enter command mode → speak a command → press again to process</p>
           <p><strong className="text-gray-400">New session:</strong> Ctrl+N clears the editor</p>
-          <p><strong className="text-gray-400">Cancel:</strong> Esc stops any active recording</p>
+          <p><strong className="text-gray-400">Cancel:</strong> Esc stops any active recording or exits command mode</p>
         </div>
       </Section>
 

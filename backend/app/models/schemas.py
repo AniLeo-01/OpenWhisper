@@ -39,6 +39,30 @@ class CommandResponse(BaseModel):
     text: str
 
 
+# ─── Search ──────────────────────────────────────────────────────────
+
+class SearchRequest(BaseModel):
+    query: str
+    max_results: int = 5
+    search_depth: str = "basic"  # basic, advanced, fast, ultra-fast
+    topic: str = "general"  # general, news, finance
+    tavily_api_key: str = ""  # Optional frontend-provided key
+
+
+class SearchResultItem(BaseModel):
+    title: str
+    url: str
+    content: str
+    score: float
+
+
+class SearchResponse(BaseModel):
+    query: str
+    answer: str | None = None
+    results: list[SearchResultItem]
+    response_time: float
+
+
 # ─── Health ──────────────────────────────────────────────────────────
 
 class HealthResponse(BaseModel):
