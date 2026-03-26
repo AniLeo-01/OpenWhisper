@@ -4,6 +4,10 @@ AI post-processing service.
 Cleans up raw transcriptions by removing filler words, fixing grammar,
 handling self-corrections, and adjusting tone. Supports multiple providers:
 Groq (Llama 3.3), OpenAI (GPT-4o-mini), or Ollama (local).
+
+All functions accept optional per-request API keys that take priority
+over environment variable keys. This allows the frontend to forward
+user-provided keys without requiring server-side configuration.
 """
 
 import logging
@@ -87,16 +91,17 @@ Apply the voice command to transform the selected text. Return ONLY the transfor
 # ─── Provider Calls ──────────────────────────────────────────────────
 
 
-async def call_ai(prompt: str, provider: str | None = None) -> str:
+async def call_ai(
+    prompt: str,
+    provider: str | None = None,
+    groq_api_key: str = "",
+    openai_api_key: str = "",
+    ollama_url: str = "",
+) -> str:
     """
     Call the configured AI provider with a prompt.
 
-    Args:
-        prompt: The full prompt to send
-        provider: Override provider (groq, openai, ollama)
-
-    Returns:
-        The AI response text
+    Per-request API keys take priority over environment variable keys.
     """
     provider = provider or settings.default_ai_provider
 
@@ -105,20 +110,20 @@ async def call_ai(prompt: str, provider: str | None = None) -> str:
 
     match provider:
         case "groq":
-            return await _call_groq(prompt)
+            return await _call_groq(prompt, groq_api_key)
         case "openai":
-            return await _call_openai(prompt)
+            return await _call_openai(prompt, openai_api_key)
         case "ollama":
-            return await _call_ollama(prompt)
+            return await _call_ollama(prompt, ollama_url)
         case _:
             logger.warning(f"Unknown AI provider: {provider}")
             return ""
 
 
-async def _call_groq(prompt: str) -> str:
-    api_key = settings.groq_api_key
+async def _call_groq(prompt: str, request_key: str = "") -> str:
+    api_key = request_key or settings.groq_api_key
     if not api_key:
-        raise ValueError("OPENWHISPER_GROQ_API_KEY not set")
+        raise ValueError("Groq API key required — set OPENWHISPER_GROQ_API_KEY or provide in Settings")
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
@@ -136,10 +141,10 @@ async def _call_groq(prompt: str) -> str:
         return data["choices"][0]["message"]["content"].strip()
 
 
-async def _call_openai(prompt: str) -> str:
-    api_key = settings.openai_api_key
+async def _call_openai(prompt: str, request_key: str = "") -> str:
+    api_key = request_key or settings.openai_api_key
     if not api_key:
-        raise ValueError("OPENWHISPER_OPENAI_API_KEY not set")
+        raise ValueError("OpenAI API key required — set OPENWHISPER_OPENAI_API_KEY or provide in Settings")
 
     async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
@@ -157,10 +162,11 @@ async def _call_openai(prompt: str) -> str:
         return data["choices"][0]["message"]["content"].strip()
 
 
-async def _call_ollama(prompt: str) -> str:
+async def _call_ollama(prompt: str, request_url: str = "") -> str:
+    url = request_url or settings.ollama_url
     async with httpx.AsyncClient(timeout=60) as client:
         resp = await client.post(
-            f"{settings.ollama_url}/api/generate",
+            f"{url}/api/generate",
             json={
                 "model": settings.ollama_model,
                 "prompt": prompt,
@@ -182,13 +188,16 @@ async def clean_transcription(
     dictionary: list[str] | None = None,
     provider: str | None = None,
     previous_context: str = "",
+    groq_api_key: str = "",
+    openai_api_key: str = "",
+    ollama_url: str = "",
 ) -> str:
     """Clean a raw transcription using AI post-processing, with optional session context."""
     if not text or not text.strip():
         return text
 
     prompt = build_cleanup_prompt(text, tone, dictionary, previous_context)
-    result = await call_ai(prompt, provider)
+    result = await call_ai(prompt, provider, groq_api_key, openai_api_key, ollama_url)
     return result or text  # Fall back to raw text if AI fails
 
 
@@ -196,7 +205,10 @@ async def run_command(
     selected_text: str,
     command: str,
     provider: str | None = None,
+    groq_api_key: str = "",
+    openai_api_key: str = "",
+    ollama_url: str = "",
 ) -> str:
     """Run a Command Mode transformation on selected text."""
     prompt = build_command_prompt(selected_text, command)
-    return await call_ai(prompt, provider)
+    return await call_ai(prompt, provider, groq_api_key, openai_api_key, ollama_url)

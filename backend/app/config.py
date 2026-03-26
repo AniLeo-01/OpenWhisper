@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     ollama_url: str = "http://localhost:11434"
     ollama_model: str = "llama3.2"
 
+    # ─── Tavily (web search) ─────────────────────────────────
+    tavily_api_key: str = ""
+
     # ─── AI Post-Processing ────────────────────────────────
     default_ai_provider: str = "groq"  # groq, openai, ollama, none
     default_tone: str = "auto"  # auto, casual, professional, technical

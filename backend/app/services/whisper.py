@@ -48,6 +48,71 @@ def preload_model() -> None:
     get_model()
 
 
+# ─── Hallucination Filter ───────────────────────────────────────────
+#
+# Whisper hallucinates these phrases on silent or near-silent audio.
+# They come from its YouTube training data. If the ENTIRE transcription
+# is one of these (after trimming), we discard it as a false positive.
+
+HALLUCINATION_PHRASES = {
+    "thank you",
+    "thanks",
+    "thanks for watching",
+    "thank you for watching",
+    "thanks for listening",
+    "thank you for listening",
+    "bye",
+    "bye bye",
+    "goodbye",
+    "see you next time",
+    "see you",
+    "subscribe",
+    "please subscribe",
+    "like and subscribe",
+    "you",
+    "the end",
+    "i'll see you in the next video",
+    "thanks for watching guys",
+    "peace",
+    "...",
+    "…",
+    ".",
+    "",
+    "you know",
+    "so",
+    "okay",
+    "oh",
+    "hmm",
+    "uh",
+    "um",
+    "subtitles by the amara.org community",
+    "amara.org",
+    "copyright",
+    "music",
+    "♪",
+    "🎵",
+}
+
+
+def is_hallucination(text: str) -> bool:
+    """Returns True if the transcription looks like a Whisper hallucination."""
+    cleaned = text.strip().lower().replace(r"[.,!?;:\s]+$", "")
+    if not cleaned:
+        return True
+    if cleaned in HALLUCINATION_PHRASES:
+        return True
+    # Very short transcriptions that are common hallucinations
+    words = cleaned.split()
+    if len(words) <= 2 and len(cleaned) < 15:
+        filler_re = (
+            "hey", "hi", "hello", "yo", "ok", "okay", "yeah", "yep",
+            "nah", "no", "yes", "sure", "right", "huh", "hmm", "oh", "ah", "uh", "um",
+        )
+        if words[0] in filler_re and len(words) == 1:
+            return True
+    return False
+
+
 # ─── Transcription ───────────────────────────────────────────────────
 
 

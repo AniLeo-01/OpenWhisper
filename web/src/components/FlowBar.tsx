@@ -12,15 +12,20 @@ interface FlowBarProps {
   duration: number;
   onClickStart: () => void;
   onClickStop: () => void;
+  /** Whether command mode is active (toggle state) */
+  commandModeActive?: boolean;
+  /** Callback to toggle command mode */
+  onCommandToggle?: () => void;
   /** Hotkey label for dictate mode (e.g., "Ctrl") */
   dictateKey?: string;
   /** Hotkey label for hands-free mode (e.g., "Alt") */
   handsFreeKey?: string;
+  /** Hotkey label for command mode (e.g., "Shift") */
+  commandKey?: string;
 }
 
 /**
  * The Flow Bar — a floating pill at the bottom of the screen.
- * Mirrors Wispr Flow's signature UI element.
  *
  * States:
  *  - idle: subtle dark pill with mic icon, "Hold Ctrl to dictate"
@@ -35,8 +40,11 @@ export function FlowBar({
   duration,
   onClickStart,
   onClickStop,
+  commandModeActive = false,
+  onCommandToggle,
   dictateKey = "Ctrl",
   handsFreeKey = "Alt",
+  commandKey = "Shift",
 }: FlowBarProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const barsRef = useRef<number[]>(Array(24).fill(0));
@@ -92,18 +100,22 @@ export function FlowBar({
       <div
         className={`
           flex items-center gap-3 px-4 py-2.5 rounded-full transition-all duration-300 select-none
-          ${state === "idle" ? "bg-gray-900/90 border border-gray-700/50 shadow-lg backdrop-blur-md hover:border-gray-600 cursor-pointer" : ""}
+          ${state === "idle" && !commandModeActive ? "bg-gray-900/90 border border-gray-700/50 shadow-lg backdrop-blur-md hover:border-gray-600 cursor-pointer" : ""}
+          ${state === "idle" && commandModeActive ? "bg-gray-900/95 border border-purple-500/40 shadow-[0_0_25px_rgba(168,85,247,0.15)] backdrop-blur-md" : ""}
           ${state === "recording" ? "bg-gray-900/95 border border-red-500/40 shadow-[0_0_25px_rgba(239,68,68,0.15)] backdrop-blur-md" : ""}
           ${state === "hands-free" ? "bg-gray-900/95 border border-emerald-500/40 shadow-[0_0_25px_rgba(16,185,129,0.15)] backdrop-blur-md" : ""}
           ${state === "processing" ? "bg-gray-900/90 border border-cyan-500/30 shadow-lg backdrop-blur-md" : ""}
           ${state === "command" ? "bg-gray-900/95 border border-purple-500/40 shadow-[0_0_25px_rgba(168,85,247,0.15)] backdrop-blur-md" : ""}
         `}
-        onClick={state === "idle" ? onClickStart : undefined}
+        onClick={state === "idle" && !commandModeActive ? onClickStart : undefined}
       >
         {/* Left icon */}
         <div className="flex items-center justify-center w-8 h-8">
-          {state === "idle" && (
+          {state === "idle" && !commandModeActive && (
             <Mic className="w-4 h-4 text-gray-400" />
+          )}
+          {state === "idle" && commandModeActive && (
+            <Sparkles className="w-4 h-4 text-purple-400 animate-pulse" />
           )}
           {state === "recording" && (
             <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
@@ -133,7 +145,15 @@ export function FlowBar({
             </span>
           </div>
         ) : state === "processing" ? (
-          <span className="text-sm text-gray-300">Transcribing...</span>
+          <span className="text-sm text-gray-300">Processing...</span>
+        ) : commandModeActive ? (
+          <span className="text-sm text-purple-300">
+            Command mode —{" "}
+            <kbd className="px-1.5 py-0.5 bg-gray-800 rounded text-purple-400 text-xs font-mono">
+              {commandKey}
+            </kbd>{" "}
+            to speak
+          </span>
         ) : (
           <span className="text-sm text-gray-500">
             Hold{" "}
@@ -149,7 +169,7 @@ export function FlowBar({
           </span>
         )}
 
-        {/* Right: stop button or settings */}
+        {/* Right: stop button, command toggle, or settings */}
         {isActive ? (
           <button
             onClick={(e) => {
@@ -160,14 +180,37 @@ export function FlowBar({
           >
             <Square className="w-3 h-3 text-white fill-white" />
           </button>
-        ) : state === "idle" ? (
-          <Link
-            href="/settings"
-            onClick={(e) => e.stopPropagation()}
-            className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-white/10 transition-colors"
+        ) : commandModeActive ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onCommandToggle?.();
+            }}
+            className="flex items-center justify-center w-7 h-7 rounded-full bg-purple-500/20 hover:bg-purple-500/30 transition-colors"
+            title="Exit command mode"
           >
-            <Settings className="w-3.5 h-3.5 text-gray-600" />
-          </Link>
+            <Square className="w-3 h-3 text-purple-400 fill-purple-400" />
+          </button>
+        ) : state === "idle" ? (
+          <div className="flex items-center gap-1">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onCommandToggle?.();
+              }}
+              className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-purple-500/10 transition-colors"
+              title="Command mode"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-gray-600 hover:text-purple-400" />
+            </button>
+            <Link
+              href="/settings"
+              onClick={(e) => e.stopPropagation()}
+              className="flex items-center justify-center w-7 h-7 rounded-full hover:bg-white/10 transition-colors"
+            >
+              <Settings className="w-3.5 h-3.5 text-gray-600" />
+            </Link>
+          </div>
         ) : null}
       </div>
 
@@ -179,12 +222,12 @@ export function FlowBar({
       )}
       {state === "hands-free" && (
         <p className="text-center text-xs text-emerald-600/60 mt-2">
-          Listening... press Ctrl to stop
+          Listening... press {handsFreeKey} to stop
         </p>
       )}
       {state === "command" && (
         <p className="text-center text-xs text-purple-500/60 mt-2">
-          Speak a command to transform selected text
+          Speak a command... press {commandKey} to process
         </p>
       )}
     </div>

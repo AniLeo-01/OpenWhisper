@@ -3,60 +3,50 @@ import { NextRequest, NextResponse } from "next/server";
 const BACKEND_URL = process.env.OPENWHISPER_BACKEND_URL || "http://localhost:8000";
 
 /**
- * POST /api/process
+ * POST /api/command/execute
  *
- * Thin proxy to backend /v1/process.
- * All AI post-processing happens on the backend.
+ * Thin proxy to backend /v1/command/execute.
+ * Backend handles all extension detection, routing, and execution.
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const {
-      text,
-      previousContext = "",
-      provider = "none",
-      tone = "auto",
+      command,
+      selectedText = "",
+      provider = "groq",
       groqApiKey,
       openaiApiKey,
       ollamaUrl,
-      dictionary = [],
+      tavilyApiKey,
     } = body;
 
-    if (!text || text.trim().length === 0) {
-      return NextResponse.json({ text: "" });
-    }
-
-    if (provider === "none") {
-      return NextResponse.json({ text });
-    }
-
-    const res = await fetch(`${BACKEND_URL}/v1/process`, {
+    const res = await fetch(`${BACKEND_URL}/v1/command/execute`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        text,
-        previous_context: previousContext,
+        command,
+        selected_text: selectedText,
         provider,
-        tone,
-        dictionary,
         groq_api_key: groqApiKey || "",
         openai_api_key: openaiApiKey || "",
         ollama_url: ollamaUrl || "",
+        tavily_api_key: tavilyApiKey || "",
       }),
     });
 
     const data = await res.json();
     if (!res.ok) {
       return NextResponse.json(
-        { error: data.detail || "Processing failed" },
+        { error: data.detail || "Command failed" },
         { status: res.status }
       );
     }
 
     return NextResponse.json(data);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Processing failed";
-    console.error("Post-processing error:", error);
+    const message = error instanceof Error ? error.message : "Command failed";
+    console.error("Command execute error:", error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

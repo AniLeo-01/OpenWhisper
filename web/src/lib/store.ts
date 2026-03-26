@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { ExtensionResult } from "./extensions/types";
 
 // ─── Types ────────────────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ export interface Settings {
   hotkeyCommand: string;
   hotkeyNewSession: string;
   personalDictionary: string[];
+  tavilyApiKey: string;
 }
 
 export interface AppStore {
@@ -43,6 +45,10 @@ export interface AppStore {
   sessionRawText: string;
   latestCleanedSegment: string;
   sessionSegments: SessionSegment[];
+
+  // Command mode state
+  commandModeActive: boolean;
+  commandResult: ExtensionResult | null;
 
   // History
   history: TranscriptionEntry[];
@@ -60,6 +66,10 @@ export interface AppStore {
   getSessionContext(): string;
   newSession(): void;
   loadIntoSession(text: string): void;
+
+  // Command mode methods
+  setCommandModeActive(active: boolean): void;
+  setCommandResult(result: ExtensionResult | null): void;
 
   // History methods
   addToHistory(entry: TranscriptionEntry): void;
@@ -86,6 +96,7 @@ const defaultSettings: Settings = {
   hotkeyCommand: "Shift",
   hotkeyNewSession: "N",
   personalDictionary: [],
+  tavilyApiKey: "",
 };
 
 // ─── Store ────────────────────────────────────────────────────────
@@ -98,6 +109,8 @@ export const useAppStore = create<AppStore>()(
       sessionRawText: "",
       latestCleanedSegment: "",
       sessionSegments: [],
+      commandModeActive: false,
+      commandResult: null,
       history: [],
       settings: defaultSettings,
 
@@ -123,6 +136,7 @@ export const useAppStore = create<AppStore>()(
           sessionRawText: "",
           latestCleanedSegment: "",
           sessionSegments: [],
+          commandResult: null,
         });
       },
 
@@ -133,6 +147,17 @@ export const useAppStore = create<AppStore>()(
           latestCleanedSegment: "",
           sessionSegments: [],
         });
+      },
+
+      setCommandModeActive(active: boolean) {
+        set({ commandModeActive: active });
+        if (!active) {
+          // Clear result when exiting command mode
+        }
+      },
+
+      setCommandResult(result: ExtensionResult | null) {
+        set({ commandResult: result });
       },
 
       addToHistory(entry: TranscriptionEntry) {
