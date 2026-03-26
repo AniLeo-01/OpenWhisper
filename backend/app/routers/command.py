@@ -35,11 +35,24 @@ async def execute_command(req: CommandExecuteRequest):
         raise HTTPException(status_code=400, detail="Command is required")
 
     has_selected_text = bool(req.selected_text and req.selected_text.strip())
-    extension = detect_extension(req.command, has_selected_text)
+    extension = await detect_extension(
+        req.command,
+        has_selected_text,
+        provider=req.provider,
+        groq_api_key=req.groq_api_key,
+        openai_api_key=req.openai_api_key,
+        ollama_url=req.ollama_url,
+    )
 
     logger.info(f"Command detected as '{extension}': {req.command!r}")
 
     try:
+        if extension == "none":
+            return CommandExecuteResponse(
+                type="text",
+                text=None,
+            )
+
         if extension == "search":
             query = extract_search_query(req.command)
             result = await web_search(
