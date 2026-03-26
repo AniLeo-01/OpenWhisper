@@ -7,6 +7,7 @@ with lower memory usage and comparable accuracy.
 
 import io
 import logging
+import threading
 import time
 
 import numpy as np
@@ -20,22 +21,26 @@ logger = logging.getLogger(__name__)
 # ─── Lazy-loaded global model ────────────────────────────────────────
 
 _model: WhisperModel | None = None
+_model_lock = threading.Lock()
 
 
 def get_model() -> WhisperModel:
-    """Load the Whisper model (lazy singleton)."""
+    """Load the Whisper model (thread-safe lazy singleton)."""
     global _model
-    if _model is None:
-        logger.info(
-            f"Loading Whisper model '{settings.whisper_model}' "
-            f"on device={settings.whisper_device}, compute={settings.whisper_compute_type}"
-        )
-        _model = WhisperModel(
-            settings.whisper_model,
-            device=settings.whisper_device,
-            compute_type=settings.whisper_compute_type,
-        )
-        logger.info("Whisper model loaded successfully")
+    if _model is not None:
+        return _model
+    with _model_lock:
+        if _model is None:
+            logger.info(
+                f"Loading Whisper model '{settings.whisper_model}' "
+                f"on device={settings.whisper_device}, compute={settings.whisper_compute_type}"
+            )
+            _model = WhisperModel(
+                settings.whisper_model,
+                device=settings.whisper_device,
+                compute_type=settings.whisper_compute_type,
+            )
+            logger.info("Whisper model loaded successfully")
     return _model
 
 

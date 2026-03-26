@@ -9,6 +9,7 @@ Provides:
 """
 
 import logging
+import threading
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -37,11 +38,15 @@ async def lifespan(app: FastAPI):
     logger.info(f"Whisper model: {settings.whisper_model}")
     logger.info(f"AI provider: {settings.default_ai_provider}")
 
-    try:
-        preload_model()
-    except Exception as e:
-        logger.warning(f"Could not pre-load Whisper model: {e}")
-        logger.warning("Model will be loaded on first transcription request")
+    # Load model in background so health checks pass immediately
+    def _load():
+        try:
+            preload_model()
+        except Exception as e:
+            logger.warning(f"Could not pre-load Whisper model: {e}")
+            logger.warning("Model will be loaded on first transcription request")
+
+    threading.Thread(target=_load, name="whisper-preload", daemon=True).start()
 
     yield
 
