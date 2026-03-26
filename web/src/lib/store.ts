@@ -66,6 +66,7 @@ export interface AppStore {
   getSessionContext(): string;
   newSession(): void;
   loadIntoSession(text: string): void;
+  replaceInSession(oldText: string, newText: string): void;
 
   // Command mode methods
   setCommandModeActive(active: boolean): void;
@@ -144,6 +145,31 @@ export const useAppStore = create<AppStore>()(
         set({
           sessionCleanedText: text,
           sessionRawText: text,
+          latestCleanedSegment: "",
+          sessionSegments: [],
+        });
+      },
+
+      replaceInSession(oldText: string, newText: string) {
+        const state = get();
+        const idx = state.sessionCleanedText.indexOf(oldText);
+        if (idx === -1) {
+          // Selected text not found — fall back to full replacement
+          set({
+            sessionCleanedText: newText,
+            sessionRawText: newText,
+            latestCleanedSegment: "",
+            sessionSegments: [],
+          });
+          return;
+        }
+        const updatedCleaned =
+          state.sessionCleanedText.slice(0, idx) +
+          newText +
+          state.sessionCleanedText.slice(idx + oldText.length);
+        set({
+          sessionCleanedText: updatedCleaned,
+          sessionRawText: updatedCleaned,
           latestCleanedSegment: "",
           sessionSegments: [],
         });

@@ -2,92 +2,105 @@
 Extension detection and routing service.
 
 Determines which extension a voice command should route to (search, transform, etc.)
-and extracts relevant parameters. This is the core business logic for command mode.
+and extracts relevant parameters. Uses an LLM call to classify intent, avoiding
+false positives from transcription artifacts like filler words.
 """
 
 import logging
 
+from app.services.ai import call_ai
+
 logger = logging.getLogger(__name__)
 
-# ─── Trigger Patterns ────────────────────────────────────────────────
 
-SEARCH_TRIGGERS = [
-    "search for",
-    "search",
-    "look up",
-    "find",
-    "what is",
-    "what are",
-    "who is",
-    "who are",
-    "how to",
-    "how do",
-    "how does",
-    "google",
-    "web search for",
-    "web search",
-]
+# ─── Classification Prompt ───────────────────────────────────────────
 
-TRANSFORM_TRIGGERS = [
-    "transform",
-    "make it",
-    "make this",
-    "rewrite",
-    "change",
-    "convert",
-    "translate",
-    "fix",
-    "improve",
-    "summarize",
-    "expand",
-    "shorten",
-]
+
+def _build_classify_prompt(command: str, has_selected_text: bool) -> str:
+    """Build the prompt for LLM-based command classification."""
+    context = "The user HAS selected text." if has_selected_text else "The user has NOT selected any text."
+    return f"""You are a command classifier for a voice dictation app. The user spoke a voice command and you must classify it.
+
+{context}
+
+The voice command is:
+\"\"\"{command}\"\"\"
+
+Classify this command into exactly ONE of these categories:
+- "search" — the user wants to search the web for information (e.g., "search for Python tutorials", "what is quantum computing", "look up the weather")
+- "transform" — the user wants to transform/edit the selected text (e.g., "make it uppercase", "translate to Spanish", "summarize this", "fix the grammar")
+- "none" — the input is NOT a valid command. It is noise, filler words, gibberish, or an accidental recording (e.g., "uh", "um", "hmm", "", random syllables)
+
+Rules:
+1. If the input is just filler words, very short gibberish, or clearly not an intentional command, classify as "none"
+2. If the user has selected text and gives a transformation instruction, classify as "transform"
+3. Only classify as "search" if the user clearly wants to look something up on the web
+
+Respond with ONLY one word: search, transform, or none"""
 
 
 # ─── Detection ───────────────────────────────────────────────────────
 
 
-def detect_extension(command: str, has_selected_text: bool) -> str:
+async def detect_extension(
+    command: str,
+    has_selected_text: bool,
+    provider: str | None = None,
+    groq_api_key: str = "",
+    openai_api_key: str = "",
+    ollama_url: str = "",
+) -> str:
     """
-    Detect which extension a command should route to.
+    Detect which extension a command should route to using LLM classification.
 
     Returns:
         "search" — web search via Tavily
         "transform" — text transformation via AI
+        "none" — not a valid command (noise/filler)
     """
-    lower = command.lower().strip()
+    prompt = _build_classify_prompt(command, has_selected_text)
 
-    # Check search triggers first (more specific)
-    for trigger in SEARCH_TRIGGERS:
-        if lower.startswith(trigger):
-            return "search"
+    try:
+        result = await call_ai(prompt, provider, groq_api_key, openai_api_key, ollama_url)
+        classification = result.strip().lower().rstrip(".")
 
-    # Check transform triggers
-    for trigger in TRANSFORM_TRIGGERS:
-        if lower.startswith(trigger):
-            return "transform"
+        if classification in ("search", "transform", "none"):
+            return classification
 
-    # Fallback: if text is selected, assume transform; otherwise search
+        # LLM returned something unexpected — fall back to heuristic
+        logger.warning(f"Unexpected classification result: {result!r}, falling back to heuristic")
+    except Exception as e:
+        logger.warning(f"LLM classification failed: {e}, falling back to heuristic")
+
+    # Heuristic fallback if LLM fails
     if has_selected_text:
         return "transform"
-
     return "search"
 
 
 def extract_search_query(command: str) -> str:
     """
-    Strip trigger prefix from a command to get the raw search query.
+    Strip common search prefixes from a command to get the raw search query.
 
     E.g., "search for latest AI news" → "latest AI news"
     """
     lower = command.lower()
 
-    # Sort by length descending so longer prefixes match first
-    sorted_triggers = sorted(SEARCH_TRIGGERS, key=len, reverse=True)
+    prefixes = [
+        "web search for",
+        "web search",
+        "search for",
+        "search",
+        "look up",
+        "google",
+    ]
 
-    for trigger in sorted_triggers:
-        if lower.startswith(trigger):
-            rest = command[len(trigger):].strip()
+    # Sort by length descending so longer prefixes match first
+    sorted_prefixes = sorted(prefixes, key=len, reverse=True)
+
+    for prefix in sorted_prefixes:
+        if lower.startswith(prefix):
+            rest = command[len(prefix):].strip()
             return rest if rest else command
 
     return command

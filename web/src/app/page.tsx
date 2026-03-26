@@ -345,6 +345,7 @@ export default function Home() {
             commandMode.deactivate();
           } else {
             handleStop();
+            handsFreeHotkey.forceStop();
           }
         }}
         commandModeActive={commandMode.isActive}

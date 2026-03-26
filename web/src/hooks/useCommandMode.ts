@@ -37,6 +37,7 @@ export function useCommandMode({
   const setCommandModeActive = useAppStore((s) => s.setCommandModeActive);
   const setCommandResult = useAppStore((s) => s.setCommandResult);
   const loadIntoSession = useAppStore((s) => s.loadIntoSession);
+  const replaceInSession = useAppStore((s) => s.replaceInSession);
 
   const isRecordingRef = useRef(false);
 
@@ -129,7 +130,11 @@ export function useCommandMode({
       // Step 4: Display result
       if (data.type === "text" && data.text) {
         setCommandResult({ type: "text", text: data.text });
-        loadIntoSession(data.text);
+        if (selectedText) {
+          replaceInSession(selectedText, data.text);
+        } else {
+          loadIntoSession(data.text);
+        }
       } else if (data.type === "search") {
         setCommandResult({
           type: "search",
@@ -147,7 +152,7 @@ export function useCommandMode({
       setFlowState("idle");
       setCommandModeActive(false);
     }
-  }, [stopRecording, settings, setFlowState, setCommandModeActive, setCommandResult, loadIntoSession, setError]);
+  }, [stopRecording, settings, setFlowState, setCommandModeActive, setCommandResult, loadIntoSession, replaceInSession, setError]);
 
   const deactivate = useCallback(() => {
     if (isRecordingRef.current) {
@@ -161,14 +166,8 @@ export function useCommandMode({
   // Toggle hotkey for command mode
   const commandHotkey = useHotkey({
     key: settings.hotkeyCommand || "Shift",
-    onStart: () => {
-      if (commandModeActive) {
-        deactivate();
-      } else {
-        activate();
-      }
-    },
-    onStop: () => {},
+    onStart: activate,
+    onStop: deactivate,
     enabled: flowState === "idle" || flowState === "command",
     mode: "toggle",
   });
