@@ -19,10 +19,10 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# Copy standalone output and static assets
-COPY --from=base /app/.next/standalone ./
-COPY --from=base /app/.next/static ./.next/static
-COPY --from=base /app/public ./public
+# Copy standalone output and static assets with correct ownership
+COPY --from=base --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=base --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=base --chown=nextjs:nodejs /app/public ./public
 
 USER nextjs
 
