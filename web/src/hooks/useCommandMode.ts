@@ -166,14 +166,8 @@ export function useCommandMode({
   // Toggle hotkey for command mode
   const commandHotkey = useHotkey({
     key: settings.hotkeyCommand || "Shift",
-    onStart: () => {
-      if (commandModeActive) {
-        deactivate();
-      } else {
-        activate();
-      }
-    },
-    onStop: () => {},
+    onStart: activate,
+    onStop: deactivate,
     enabled: flowState === "idle" || flowState === "command",
     mode: "toggle",
   });
