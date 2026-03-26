@@ -4,8 +4,6 @@ import { useCallback, useRef } from "react";
 import { useAppStore } from "@/lib/store";
 import { useHotkey } from "@/hooks/useHotkey";
 import { runDictationPipeline } from "@/lib/transcribe";
-import { matchExtension } from "@/lib/extensions/registry";
-import type { ExtensionResult } from "@/lib/extensions/types";
 import type { FlowBarState } from "@/components/FlowBar";
 
 interface UseCommandModeOptions {
@@ -17,11 +15,15 @@ interface UseCommandModeOptions {
 }
 
 /**
- * Encapsulates all command mode logic:
- * - Toggle hotkey activation (independent of text selection)
- * - Records audio, transcribes the spoken command
- * - Routes to the matching extension (search, transform, etc.)
- * - Returns result to display
+ * Command mode hook — handles only I/O:
+ * 1. Toggle activation via hotkey
+ * 2. Record audio
+ * 3. Get selected text from DOM
+ * 4. Send to backend (/api/command/execute)
+ * 5. Return result for display
+ *
+ * All business logic (extension detection, routing, query extraction)
+ * lives in the backend.
  */
 export function useCommandMode({
   flowState,
@@ -35,7 +37,6 @@ export function useCommandMode({
   const setCommandModeActive = useAppStore((s) => s.setCommandModeActive);
   const setCommandResult = useAppStore((s) => s.setCommandResult);
   const loadIntoSession = useAppStore((s) => s.loadIntoSession);
-  const addToHistory = useAppStore((s) => s.addToHistory);
 
   const isRecordingRef = useRef(false);
 
@@ -43,13 +44,11 @@ export function useCommandMode({
     if (flowState === "processing") return;
 
     if (commandModeActive && isRecordingRef.current) {
-      // Already recording in command mode — stop and process
       await processCommand();
       return;
     }
 
     if (commandModeActive && !isRecordingRef.current) {
-      // Command mode active but not recording — start recording
       try {
         setError(null);
         await startRecording();
@@ -61,7 +60,7 @@ export function useCommandMode({
       return;
     }
 
-    // Enter command mode
+    // Enter command mode and start recording
     setCommandModeActive(true);
     setCommandResult(null);
     setError(null);
@@ -82,19 +81,19 @@ export function useCommandMode({
       isRecordingRef.current = false;
 
       if (audioBlob.size === 0) {
-        setFlowState(commandModeActive ? "idle" : "idle");
+        setFlowState("idle");
         setCommandModeActive(false);
         return;
       }
 
       setFlowState("processing");
 
-      // Transcribe the spoken command (no post-processing — keep raw command)
+      // Step 1: Transcribe the spoken command (no post-processing)
       const commandResult = await runDictationPipeline(audioBlob, {
         ...settings,
         postProcess: false,
       });
-      const commandText = commandResult.rawText;
+      const commandText = commandResult.rawText || commandResult.cleanedText;
 
       if (!commandText.trim()) {
         setFlowState("idle");
@@ -102,42 +101,44 @@ export function useCommandMode({
         return;
       }
 
-      // Get selected text (if any, for transform extension)
+      // Step 2: Get selected text from DOM (I/O only)
       const selectedText = window.getSelection()?.toString().trim() || "";
 
-      // Match command to extension
-      const extension = matchExtension(commandText, !!selectedText);
+      // Step 3: Send to backend — backend handles all routing/logic
+      const res = await fetch("/api/command/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          command: commandText,
+          selectedText,
+          provider: settings.aiProvider,
+          groqApiKey: settings.groqApiKey,
+          openaiApiKey: settings.openaiApiKey,
+          ollamaUrl: settings.ollamaUrl,
+          tavilyApiKey: settings.tavilyApiKey,
+        }),
+      });
 
-      let result: ExtensionResult;
-
-      if (extension) {
-        result = await extension.execute(commandText, {
-          selectedText: selectedText || undefined,
-          settings,
-        });
-      } else {
-        // No extension matched and no text selected — treat as general query
-        // Default to search if no match
-        const searchExt = (await import("@/lib/extensions/search")).searchExtension;
-        result = await searchExt.execute(commandText, {
-          selectedText: selectedText || undefined,
-          settings,
-        });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Command failed" }));
+        throw new Error(err.error || "Command failed");
       }
 
-      // Handle result
-      setCommandResult(result);
+      const data = await res.json();
 
-      if (result.type === "text" && result.text) {
-        loadIntoSession(result.text);
-        addToHistory({
-          id: crypto.randomUUID(),
-          rawText: `[Command: ${commandText}] ${selectedText || ""}`.trim(),
-          cleanedText: result.text,
-          duration: 0,
-          language: settings.language,
-          timestamp: Date.now(),
-          engine: settings.sttEngine,
+      // Step 4: Display result
+      if (data.type === "text" && data.text) {
+        setCommandResult({ type: "text", text: data.text });
+        loadIntoSession(data.text);
+      } else if (data.type === "search") {
+        setCommandResult({
+          type: "search",
+          searchResults: {
+            query: data.query || "",
+            answer: data.answer || null,
+            results: data.results || [],
+            responseTime: data.response_time || 0,
+          },
         });
       }
     } catch (err) {
@@ -146,7 +147,7 @@ export function useCommandMode({
       setFlowState("idle");
       setCommandModeActive(false);
     }
-  }, [stopRecording, settings, commandModeActive, setFlowState, setCommandModeActive, setCommandResult, loadIntoSession, addToHistory, setError]);
+  }, [stopRecording, settings, setFlowState, setCommandModeActive, setCommandResult, loadIntoSession, setError]);
 
   const deactivate = useCallback(() => {
     if (isRecordingRef.current) {
@@ -167,9 +168,7 @@ export function useCommandMode({
         activate();
       }
     },
-    onStop: () => {
-      // Toggle mode — onStop is not used
-    },
+    onStop: () => {},
     enabled: flowState === "idle" || flowState === "command",
     mode: "toggle",
   });

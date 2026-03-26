@@ -47,6 +47,40 @@ class CommandResponse(BaseModel):
     text: str
 
 
+# ─── Unified Command Execute ─────────────────────────────────────────
+
+class CommandExecuteRequest(BaseModel):
+    command: str
+    selected_text: str = ""
+    provider: str = "groq"
+    groq_api_key: str = ""
+    openai_api_key: str = ""
+    ollama_url: str = ""
+    tavily_api_key: str = ""
+
+
+class CommandExecuteResponse(BaseModel):
+    type: str  # "search" or "text"
+    # For text transforms:
+    text: str | None = None
+    # For search:
+    query: str | None = None
+    answer: str | None = None
+    results: list["SearchResultItem"] | None = None
+    response_time: float | None = None
+
+
+# ─── Transcription Pipeline ──────────────────────────────────────────
+
+class TranscriptionPipelineResponse(BaseModel):
+    id: str
+    raw_text: str
+    cleaned_text: str
+    language: str
+    duration_ms: int
+    filtered: bool = False
+
+
 # ─── Search ──────────────────────────────────────────────────────────
 
 class SearchRequest(BaseModel):

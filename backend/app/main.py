@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.models.schemas import HealthResponse
-from app.routers import process, search, transcribe
+from app.routers import command, process, search, transcribe
 from app.services.whisper import is_model_loaded, preload_model
 
 logging.basicConfig(
@@ -69,6 +69,7 @@ app.add_middleware(
 # Routes
 app.include_router(transcribe.router)
 app.include_router(process.router)
+app.include_router(command.router)
 app.include_router(search.router)
 
 

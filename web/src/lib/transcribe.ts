@@ -5,84 +5,62 @@ export type DictationOptions = Settings & {
 };
 
 /**
- * End-to-end dictation pipeline:
- * 1. Transcribe audio via /api/transcribe
- * 2. Post-process via /api/process (if enabled)
- * 3. Return a TranscriptionEntry
+ * Send audio to the backend pipeline and get a complete transcription entry.
+ *
+ * The backend handles everything: transcribe → filter hallucinations → post-process.
+ * The frontend just sends audio + settings.
  */
 export async function runDictationPipeline(
   audioBlob: Blob,
   options: DictationOptions,
   previousContext?: string
 ): Promise<TranscriptionEntry> {
-  // Step 1: Transcribe
   const formData = new FormData();
   formData.append("file", audioBlob, "audio.webm");
-  formData.append("engine", options.sttEngine);
   formData.append("language", options.language || "auto");
+  formData.append("provider", options.aiProvider || "groq");
+  formData.append("tone", options.tone || "auto");
+  formData.append("post_process", options.postProcess !== false ? "true" : "false");
 
-  if (options.groqApiKey) {
-    formData.append("groqApiKey", options.groqApiKey);
-  }
-  if (options.selfHostedUrl) {
-    formData.append("selfHostedUrl", options.selfHostedUrl);
+  if (previousContext) {
+    formData.append("previous_context", previousContext);
   }
   if (options.personalDictionary?.length) {
     formData.append("dictionary", options.personalDictionary.join(","));
   }
-  if (previousContext) {
-    formData.append("sessionContext", previousContext);
+  if (options.groqApiKey) {
+    formData.append("groqApiKey", options.groqApiKey);
   }
+  if (options.openaiApiKey) {
+    formData.append("openaiApiKey", options.openaiApiKey);
+  }
+  if (options.ollamaUrl) {
+    formData.append("ollamaUrl", options.ollamaUrl);
+  }
+  if (options.selfHostedUrl) {
+    formData.append("selfHostedUrl", options.selfHostedUrl);
+  }
+  formData.append("engine", options.sttEngine);
 
-  const transcribeRes = await fetch("/api/transcribe", {
+  const res = await fetch("/api/transcribe", {
     method: "POST",
     body: formData,
   });
 
-  if (!transcribeRes.ok) {
-    const err = await transcribeRes.json().catch(() => ({ error: "Transcription failed" }));
-    throw new Error(err.error || `Transcription failed (${transcribeRes.status})`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: "Transcription failed" }));
+    throw new Error(err.error || `Transcription failed (${res.status})`);
   }
 
-  const transcription = await transcribeRes.json();
-  const rawText = (transcription.text || "").trim();
-
-  // Step 2: Post-process (if enabled and there's text)
-  let cleanedText = rawText;
-
-  if (options.postProcess !== false && rawText && options.aiProvider !== "none") {
-    try {
-      const processRes = await fetch("/api/process", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          text: rawText,
-          previousContext: previousContext || "",
-          provider: options.aiProvider,
-          tone: options.tone,
-          groqApiKey: options.groqApiKey,
-          openaiApiKey: options.openaiApiKey,
-          ollamaUrl: options.ollamaUrl,
-          dictionary: options.personalDictionary || [],
-        }),
-      });
-
-      if (processRes.ok) {
-        const processed = await processRes.json();
-        cleanedText = (processed.text || rawText).trim();
-      }
-    } catch {
-      // Fall back to raw text if post-processing fails
-    }
-  }
+  const data = await res.json();
 
   return {
-    id: crypto.randomUUID(),
-    rawText,
-    cleanedText,
+    id: data.id || crypto.randomUUID(),
+    rawText: (data.raw_text ?? data.text ?? "").trim(),
+    cleanedText: (data.cleaned_text ?? data.raw_text ?? data.text ?? "").trim(),
     timestamp: Date.now(),
-    duration: transcription.duration || 0,
-    language: transcription.language || options.language || "auto",
+    duration: data.duration_ms || data.duration || 0,
+    language: data.language || options.language || "auto",
     engine: options.sttEngine,
   };
 }

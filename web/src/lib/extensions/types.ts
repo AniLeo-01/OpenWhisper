@@ -1,4 +1,9 @@
-import type { Settings } from "../store";
+/**
+ * Display types for rendering extension results in the UI.
+ *
+ * These are purely for the frontend to know how to render
+ * responses from the backend command pipeline.
+ */
 
 export interface SearchResultItem {
   title: string;
@@ -20,21 +25,4 @@ export interface ExtensionResult {
   text?: string;
   /** Search results (for search extensions) */
   searchResults?: SearchResults;
-}
-
-export interface ExtensionContext {
-  selectedText?: string;
-  settings: Settings;
-}
-
-export interface Extension {
-  name: string;
-  description: string;
-  /** Words that trigger this extension (matched against start of command) */
-  keywords: string[];
-  /** Execute the extension with the spoken command */
-  execute: (
-    command: string,
-    context: ExtensionContext
-  ) => Promise<ExtensionResult>;
 }
