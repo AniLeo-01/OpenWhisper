@@ -64,7 +64,7 @@
       "dependsOn": [
         {
           "containerName": "backend",
-          "condition": "HEALTHY"
+          "condition": "START"
         }
       ],
       "healthCheck": {
