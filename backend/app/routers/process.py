@@ -44,6 +44,9 @@ async def process_text(req: ProcessRequest):
             dictionary=req.dictionary or None,
             provider=req.provider,
             previous_context=req.previous_context,
+            groq_api_key=req.groq_api_key,
+            openai_api_key=req.openai_api_key,
+            ollama_url=req.ollama_url,
         )
         return ProcessResponse(text=cleaned)
     except Exception as e:
@@ -70,6 +73,9 @@ async def command_mode(req: CommandRequest):
             selected_text=req.selected_text,
             command=req.command,
             provider=req.provider,
+            groq_api_key=req.groq_api_key,
+            openai_api_key=req.openai_api_key,
+            ollama_url=req.ollama_url,
         )
         return CommandResponse(text=result)
     except Exception as e:

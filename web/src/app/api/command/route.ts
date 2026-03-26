@@ -1,21 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { callAI } from "@/lib/ai";
+
+const BACKEND_URL = process.env.OPENWHISPER_BACKEND_URL || "http://localhost:8000";
 
 /**
  * POST /api/command
  *
- * Command Mode: transforms selected text using a voice command.
- *
- * Body: {
- *   selectedText: string,
- *   command: string,
- *   provider: "groq" | "openai" | "ollama",
- *   groqApiKey?: string,
- *   openaiApiKey?: string,
- *   ollamaUrl?: string,
- * }
- *
- * Returns: { text: string }
+ * Thin proxy to backend /v1/command.
+ * All AI processing happens on the backend.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -29,34 +20,30 @@ export async function POST(request: NextRequest) {
       ollamaUrl,
     } = body;
 
-    if (!selectedText || !command) {
+    const res = await fetch(`${BACKEND_URL}/v1/command`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        selected_text: selectedText,
+        command,
+        provider,
+        groq_api_key: groqApiKey || "",
+        openai_api_key: openaiApiKey || "",
+        ollama_url: ollamaUrl || "",
+      }),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
       return NextResponse.json(
-        { error: "Both selectedText and command are required" },
-        { status: 400 }
+        { error: data.detail || "Command failed" },
+        { status: res.status }
       );
     }
 
-    const prompt = `You are a text transformation assistant. The user has selected text and given a voice command to transform it.
-
-Selected text:
-"""
-${selectedText}
-"""
-
-Voice command: "${command}"
-
-Apply the voice command to transform the selected text. Return ONLY the transformed text. No explanations, no quotes, no prefixes.`;
-
-    const result = await callAI(prompt, provider, {
-      groqApiKey,
-      openaiApiKey,
-      ollamaUrl,
-    });
-
-    return NextResponse.json({ text: result || selectedText });
+    return NextResponse.json(data);
   } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : "Command failed";
+    const message = error instanceof Error ? error.message : "Command failed";
     console.error("Command mode error:", error);
     return NextResponse.json({ error: message }, { status: 500 });
   }

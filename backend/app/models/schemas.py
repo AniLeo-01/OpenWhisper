@@ -21,6 +21,10 @@ class ProcessRequest(BaseModel):
     provider: str = "groq"  # groq, openai, ollama, none
     tone: str = "auto"  # auto, casual, professional, technical
     dictionary: list[str] = []
+    # Per-request API keys (frontend-provided, take priority over env vars)
+    groq_api_key: str = ""
+    openai_api_key: str = ""
+    ollama_url: str = ""
 
 
 class ProcessResponse(BaseModel):
@@ -33,6 +37,10 @@ class CommandRequest(BaseModel):
     selected_text: str
     command: str
     provider: str = "groq"
+    # Per-request API keys (frontend-provided, take priority over env vars)
+    groq_api_key: str = ""
+    openai_api_key: str = ""
+    ollama_url: str = ""
 
 
 class CommandResponse(BaseModel):
