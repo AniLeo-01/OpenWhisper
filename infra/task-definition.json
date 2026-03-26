@@ -57,7 +57,7 @@
       "environment": [
         { "name": "NODE_ENV", "value": "production" },
         {
-          "name": "WHISPER_SERVER_INTERNAL_URL",
+          "name": "OPENWHISPER_BACKEND_URL",
           "value": "http://localhost:8000"
         }
       ],
@@ -67,6 +67,13 @@
           "condition": "HEALTHY"
         }
       ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "wget -q --spider http://localhost:3000/ || exit 1"],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 30
+      },
       "logConfiguration": {
         "logDriver": "awslogs",
         "options": {
