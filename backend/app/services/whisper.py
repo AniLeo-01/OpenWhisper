@@ -110,8 +110,25 @@ def is_hallucination(text: str) -> bool:
     words = cleaned.split()
     if len(words) <= 2 and len(cleaned) < 15:
         filler_re = (
-            "hey", "hi", "hello", "yo", "ok", "okay", "yeah", "yep",
-            "nah", "no", "yes", "sure", "right", "huh", "hmm", "oh", "ah", "uh", "um",
+            "hey",
+            "hi",
+            "hello",
+            "yo",
+            "ok",
+            "okay",
+            "yeah",
+            "yep",
+            "nah",
+            "no",
+            "yes",
+            "sure",
+            "right",
+            "huh",
+            "hmm",
+            "oh",
+            "ah",
+            "uh",
+            "um",
         )
         if words[0] in filler_re and len(words) == 1:
             return True
@@ -120,8 +137,7 @@ def is_hallucination(text: str) -> bool:
 
 # ─── Transcription ───────────────────────────────────────────────────
 
-
-async def transcribe_audio(
+async def transcribe_audio_whisper(
     audio_bytes: bytes,
     language: str | None = None,
     prompt: str | None = None,

@@ -14,7 +14,7 @@ from fastapi import APIRouter, File, Form, UploadFile
 
 from app.models.schemas import TranscriptionPipelineResponse, TranscriptionResponse
 from app.services.ai import clean_transcription
-from app.services.whisper import is_hallucination, transcribe_audio
+from app.services.whisper import is_hallucination, transcribe_audio_whisper
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +26,9 @@ async def transcribe(
     file: UploadFile = File(..., description="Audio file (webm, wav, mp3, etc.)"),
     language: str = Form("", description="ISO language code or empty for auto-detect"),
     prompt: str = Form("", description="Context prompt (personal dictionary words)"),
-    model: str = Form("whisper-large-v3", description="Model name (ignored, uses configured model)"),
+    model: str = Form(
+        "whisper-large-v3", description="Model name (ignored, uses configured model)"
+    ),
 ):
     """
     Transcribe audio using the local faster-whisper model.
@@ -38,7 +40,7 @@ async def transcribe(
     audio_bytes = await file.read()
     lang = language if language and language != "auto" else None
 
-    text, detected_lang, duration_ms = await transcribe_audio(
+    text, detected_lang, duration_ms = await transcribe_audio_whisper(
         audio_bytes=audio_bytes,
         language=lang,
         prompt=prompt or None,
@@ -103,7 +105,9 @@ async def transcribe_pipeline(
 
     if should_process:
         try:
-            dict_list = [w.strip() for w in dictionary.split(",") if w.strip()] if dictionary else None
+            dict_list = (
+                [w.strip() for w in dictionary.split(",") if w.strip()] if dictionary else None
+            )
             cleaned_text = await clean_transcription(
                 text=text,
                 tone=tone,
